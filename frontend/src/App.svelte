@@ -1,12 +1,13 @@
 <script>
+  import { onMount } from 'svelte'
+  import Records from './Records.svelte'
+  import Merge from './Merge.svelte'
+
   let username = 'processor'
   let password = 'herb123456'
   let token = localStorage.getItem('herb_token') || ''
   let role = localStorage.getItem('herb_role') || ''
-  let rows = []
-  let herb = '白芍'
-  let tempC = 110
-  let minutes = 10
+  let view = location.hash === '#/merge' ? 'merge' : 'records'
   let error = ''
 
   async function api(path, options = {}) {
@@ -23,32 +24,16 @@
   }
 
   async function enter() {
-    const data = await api('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    })
-    token = data.access_token
-    role = data.role
-    localStorage.setItem('herb_token', token)
-    localStorage.setItem('herb_role', role)
-    await load()
-  }
-
-  async function load() {
-    rows = await api('/api/batches')
-  }
-
-  async function save() {
     error = ''
     try {
-      await api('/api/batches', {
+      const data = await api('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({
-          herb,
-          steps: [{ name: '清炒', temp_c: Number(tempC), minutes: Number(minutes) }],
-        }),
+        body: JSON.stringify({ username, password }),
       })
-      await load()
+      token = data.access_token
+      role = data.role
+      localStorage.setItem('herb_token', token)
+      localStorage.setItem('herb_role', role)
     } catch (err) {
       error = err.message
     }
@@ -60,7 +45,13 @@
     role = ''
   }
 
-  if (token) load()
+  onMount(() => {
+    const onHash = () => {
+      view = location.hash === '#/merge' ? 'merge' : 'records'
+    }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  })
 </script>
 
 <main>
@@ -70,28 +61,33 @@
     <input bind:value={username} />
     <input type="password" bind:value={password} />
     <button on:click={enter}>登录</button>
+    {#if error}<p class="err">{error}</p>{/if}
     <p>processor / herb123456 可写；checker / check123456 只读</p>
   {:else}
-    <p>
+    <nav class="topbar">
+      <a href="#/" class:active={view === 'records'}>记录总表</a>
+      <a href="#/merge" class:active={view === 'merge'}>批次合并</a>
+      <span class="who">{role === 'writer' ? '炮制员' : '质检员'}</span>
       <button on:click={leave}>退出</button>
-    </p>
-    {#if role === 'writer'}
-      <input bind:value={herb} placeholder="饮片" />
-      <input type="number" bind:value={tempC} />
-      <input type="number" bind:value={minutes} />
-      <button on:click={save}>写入清炒记录</button>
-      {#if error}<p>{error}</p>{/if}
+    </nav>
+    {#if view === 'records'}
+      <Records {api} {role} />
+    {:else}
+      <Merge {api} {role} />
     {/if}
-    <ul>
-      {#each rows as row}
-        <li>{row.herb} · {row.verdict} · {row.reason} · 温度 {row.doc.steps[0].temp_c}</li>
-      {/each}
-    </ul>
   {/if}
 </main>
 
 <style>
-  main { font-family: sans-serif; max-width: 720px; margin: 24px auto; color: #3f2f1f; }
+  main { font-family: sans-serif; max-width: 860px; margin: 24px auto; color: #3f2f1f; }
   h1 { color: #7c2d12; }
   input { margin-right: 8px; padding: 6px; }
+  .topbar {
+    display: flex; align-items: center; gap: 16px;
+    border-bottom: 2px solid #e7d9c4; padding-bottom: 10px; margin-bottom: 16px;
+  }
+  .topbar a { color: #7c2d12; text-decoration: none; padding: 4px 10px; border-radius: 6px; }
+  .topbar a.active { background: #7c2d12; color: #fff7ed; }
+  .topbar .who { margin-left: auto; color: #92755c; }
+  .err { color: #b91c1c; }
 </style>
